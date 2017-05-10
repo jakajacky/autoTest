@@ -1,0 +1,424 @@
+//
+//  LoginViewController.m
+//  Mavic
+//
+//  Created by zhangxiaoqiang on 2017/3/30.
+//  Copyright © 2017年 LoHas-Tech. All rights reserved.
+//
+
+#import "LoginViewController.h"
+#import "YYKit.h"
+#import "LoginView.h"
+#import "LoginApi.h"
+#import "LoginEntities.h"
+#import "LoginManager.h"
+#import "MBProgressHUD.h"
+#import "NSString+CheckStyle.h"
+#import "UIImage+memory.h"
+
+@interface LoginViewController ()<UITableViewDelegate, UITableViewDataSource, MBProgressHUDDelegate>
+{
+    NSTimer *_timer;
+    NSInteger countDown;
+}
+@property (nonatomic, strong) LoginApi *api;
+@property (nonatomic, strong) LoginView *loginV;
+
+@property (nonatomic, strong) NSArray *historyUsers;
+
+@end
+
+@implementation LoginViewController
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    // Do any additional setup after loading the view from its nib.
+    _loginV = (LoginView *)self.view;
+    [_loginV.loginApp addTarget:self action:@selector(loginBtnDidClicked:) forControlEvents:UIControlEventTouchUpInside];
+    [_loginV.historyUserDrop addTarget:self action:@selector(dropUserDidClicked:) forControlEvents:UIControlEventTouchUpInside];
+    
+    // 注册
+    [_loginV.registerView.registerBtn addTarget:self action:@selector(registerBtnDidClicked:) forControlEvents:UIControlEventTouchUpInside];
+    [_loginV.registerView.sendCheckCodeBtn addTarget:self action:@selector(sendCheckCodeBtnDidClicked:) forControlEvents:UIControlEventTouchUpInside];
+    
+    // 查找历史登录用户
+    self.historyUsers = [self.api getUsersFormMainDB];
+    
+    _loginV.historyUserDropList.delegate   = self;
+    _loginV.historyUserDropList.dataSource = self;
+    
+    countDown = 60;
+}
+
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    
+    //剔除 bug view
+    UIWindow *window = [UIApplication sharedApplication].windows.firstObject;
+    for (UIView *view in window.subviews) {
+        if (view.tag == 1111) {
+            view.hidden = YES;
+        }
+    }
+}
+
+- (void)didReceiveMemoryWarning {
+    [super didReceiveMemoryWarning];
+    // Dispose of any resources that can be recreated.
+}
+
+- (void)dealloc {
+    _loginV.historyUserDropList.delegate   = nil;
+    _loginV.historyUserDropList.dataSource = nil;
+    [self.loginV removeAllObserverNotification];
+    self.api = nil;
+    [self.loginV.registerView removeAllSubviews];
+    self.loginV.registerView = nil;
+    [self.loginV removeAllSubviews];
+    self.loginV = nil;
+    [_timer invalidate];
+    _timer = nil;
+    
+}
+
+#pragma mark - 登录按钮点击事件
+- (void)loginBtnDidClicked:(UIButton *)sender {
+    [self allTextResignFirstRespond];
+    
+    NSString *name = _loginV.nameField.text.stringByTrim;
+    NSString *pwd  = _loginV.passWordField.text.stringByTrim;
+    if (name.length == 0) {
+        MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:self.view animated:YES];
+        hud.labelText = @"帐号不能为空";
+        hud.mode = MBProgressHUDModeText;
+        dispatch_time_t popTime = dispatch_time(DISPATCH_TIME_NOW, 1.5 * NSEC_PER_SEC);
+        dispatch_after(popTime, dispatch_get_main_queue(), ^(void){
+            
+            [MBProgressHUD hideHUDForView:self.view animated:YES];
+        });
+        return;
+    }
+    else if (pwd.length == 0) {
+        if ([self isExistHudInView:self.loginV.containerView]) {
+            // 已经存在hud，不再弹出新的
+        }
+        else {
+            MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:self.view animated:YES];
+            hud.labelText = @"密码不能为空";
+            hud.mode = MBProgressHUDModeText;
+            dispatch_time_t popTime = dispatch_time(DISPATCH_TIME_NOW, 1.5 * NSEC_PER_SEC);
+            dispatch_after(popTime, dispatch_get_main_queue(), ^(void){
+                
+                [MBProgressHUD hideHUDForView:self.view animated:YES];
+            });
+        }
+        return;
+    }
+    
+    
+    [self.api loginWithUserName:name pwd:pwd completion:^(BOOL success, id result, NSString *msg) {
+        if (success) {
+            // 登录成功
+            NSDictionary *dic  = result;
+            User *user         = [[User alloc] initWithDictionary:dic];
+            user.isLatestLogin = YES;
+            user.password      = pwd;
+            user.isRememberPwd = _loginV.rememberPwd.selected;
+            
+            LoginManager *lm   = [LoginManager defaultManager];
+            lm.currentUser     = user;
+            
+            // 保存到数据库
+            [self.api saveCurrentUser:user];
+            
+            [self dismissViewControllerAnimated:YES completion:^{
+                
+            }];
+        }
+        else {
+            MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:self.view animated:YES];
+            hud.labelText      = msg;
+            hud.mode           = MBProgressHUDModeText;
+            
+            dispatch_time_t popTime = dispatch_time(DISPATCH_TIME_NOW, 1.5 * NSEC_PER_SEC);
+            dispatch_after(popTime, dispatch_get_main_queue(), ^(void){
+                // 清空文本
+                [self clearInputView];
+                [MBProgressHUD hideHUDForView:self.view animated:YES];
+            });
+        }
+    }];
+}
+
+#pragma mark - 注册按钮
+- (void)registerBtnDidClicked:(UIButton *)sender {
+    [self allTextResignFirstRespond];
+    
+    NSString *name = _loginV.registerView.nameField.text.stringByTrim;
+    NSString *pwd  = _loginV.registerView.passWordField.text.stringByTrim;
+    NSString *code = _loginV.registerView.checkCodeField.text.stringByTrim;
+    if (name.length == 0) {
+        // 手机号格式不正确
+        MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:self.view animated:YES];
+        hud.labelText = @"请输入正确的手机号";
+        hud.mode = MBProgressHUDModeText;
+        dispatch_time_t popTime = dispatch_time(DISPATCH_TIME_NOW, 1.5 * NSEC_PER_SEC);
+        dispatch_after(popTime, dispatch_get_main_queue(), ^(void){
+            // Do something...
+            _loginV.registerView.nameField.text = @"";
+            [MBProgressHUD hideHUDForView:self.view animated:YES];
+        });
+        return;
+    }
+    else if (code.length == 0) {
+        if ([self isExistHudInView:self.loginV.registerView]) {
+            // 已经存在hud，不再弹出新的
+        }
+        else {
+            MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:self.view animated:YES];
+            hud.labelText = @"验证码不能为空";
+            hud.mode = MBProgressHUDModeText;
+            dispatch_time_t popTime = dispatch_time(DISPATCH_TIME_NOW, 1.5 * NSEC_PER_SEC);
+            dispatch_after(popTime, dispatch_get_main_queue(), ^(void){
+                
+                [MBProgressHUD hideHUDForView:self.view animated:YES];
+            });
+        }
+        return;
+    }
+    else if (pwd.length == 0) {
+        MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:self.view animated:YES];
+        hud.labelText = @"密码不能为空";
+        hud.mode = MBProgressHUDModeText;
+        dispatch_time_t popTime = dispatch_time(DISPATCH_TIME_NOW, 1.5 * NSEC_PER_SEC);
+        dispatch_after(popTime, dispatch_get_main_queue(), ^(void){
+            
+            [MBProgressHUD hideHUDForView:self.view animated:YES];
+        });
+        return;
+    }
+    
+    // 输入通过，开始注册
+    // 校验验证码
+    [self.api checkValidationCodeWithPhone:name authCode:code type:1 compeletion:^(BOOL success, NSString *msg) {
+        if (success) { // 验证成功
+            // 注册
+            [self.api registerWithPhone:name pwd:pwd compeletion:^(BOOL success, NSString *msg) {
+                if (success) {
+                    MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:self.view animated:YES];
+                    hud.labelText      = @"注册成功";
+                    hud.mode           = MBProgressHUDModeText;
+                    
+                    dispatch_time_t popTime = dispatch_time(DISPATCH_TIME_NOW, 1.5 * NSEC_PER_SEC);
+                    dispatch_after(popTime, dispatch_get_main_queue(), ^(void){
+                        [MBProgressHUD hideHUDForView:self.view animated:YES];
+                    });
+                    
+                    // 通知 注册成功，跳转登录页面
+                    NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
+                    [center postNotificationName:RegisterSuccessNotification object:nil];
+                }
+                else  {
+                    MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:self.view animated:YES];
+                    hud.labelText      = @"注册失败，请重试";
+                    hud.mode           = MBProgressHUDModeText;
+                    
+                    dispatch_time_t popTime = dispatch_time(DISPATCH_TIME_NOW, 1.5 * NSEC_PER_SEC);
+                    dispatch_after(popTime, dispatch_get_main_queue(), ^(void){
+                        [MBProgressHUD hideHUDForView:self.view animated:YES];
+                    });
+                }
+            }];
+            
+        }
+        else {
+            MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:self.view animated:YES];
+            hud.labelText      = msg;
+            hud.mode           = MBProgressHUDModeText;
+            
+            dispatch_time_t popTime = dispatch_time(DISPATCH_TIME_NOW, 1.5 * NSEC_PER_SEC);
+            dispatch_after(popTime, dispatch_get_main_queue(), ^(void){
+                [MBProgressHUD hideHUDForView:self.view animated:YES];
+            });
+        }
+    }];
+    
+}
+
+#pragma mark - 发送验证码
+- (void)sendCheckCodeBtnDidClicked:(UIButton *)sender {
+    [self allTextResignFirstRespond];
+    
+    NSString *name = _loginV.registerView.nameField.text.stringByTrim;
+    if (name.length==0) {
+        // 手机号格式不正确
+        MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:self.view animated:YES];
+        hud.labelText = @"手机号不能为空";
+        hud.mode = MBProgressHUDModeText;
+        dispatch_time_t popTime = dispatch_time(DISPATCH_TIME_NOW, 1.5 * NSEC_PER_SEC);
+        dispatch_after(popTime, dispatch_get_main_queue(), ^(void){
+            // Do something...
+            _loginV.registerView.nameField.text = @"";
+            [MBProgressHUD hideHUDForView:self.view animated:YES];
+        });
+        return;
+    }
+    else {
+        
+        [self.api getValidationCodeWithPhoneNumber:name completion:^(BOOL success, NSString *msg) {
+            if (success) {
+                NSLog(@"%@", msg);
+                MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:self.view animated:YES];
+                hud.labelText      = @"验证码已发送，请查看";
+                hud.mode           = MBProgressHUDModeText;
+    
+                dispatch_time_t popTime = dispatch_time(DISPATCH_TIME_NOW, 1.5 * NSEC_PER_SEC);
+                dispatch_after(popTime, dispatch_get_main_queue(), ^(void){
+                    [MBProgressHUD hideHUDForView:self.view animated:YES];
+                    
+                    // 同时开启重发倒计时
+                    self.loginV.registerView.sendCheckCodeBtn.enabled = NO;
+                    _timer = [NSTimer scheduledTimerWithTimeInterval:1 target:self selector:@selector(countDown) userInfo:nil repeats:YES];
+                    [[NSRunLoop currentRunLoop] addTimer:_timer forMode:NSRunLoopCommonModes];
+                    
+                    [self.loginV.registerView.sendCheckCodeBtn setTitle:[NSString stringWithFormat:@"重新发送(%ld)", countDown] forState:UIControlStateNormal];
+                });
+            }
+            else {
+                NSLog(@"%@", msg);
+                MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:self.view animated:YES];
+                hud.labelText      = @"获取验证码失败，请重试";
+                hud.mode           = MBProgressHUDModeText;
+                
+                dispatch_time_t popTime = dispatch_time(DISPATCH_TIME_NOW, 1.5 * NSEC_PER_SEC);
+                dispatch_after(popTime, dispatch_get_main_queue(), ^(void){
+                    [MBProgressHUD hideHUDForView:self.view animated:YES];
+                });
+            }
+        }];
+    }
+}
+
+#pragma mark - 验证码重发倒计时
+- (void)countDown {
+    countDown -= 1;
+    // 同时开启重发倒计时
+    self.loginV.registerView.sendCheckCodeBtn.titleLabel.text = [NSString stringWithFormat:@"重新发送(%ld)", countDown];
+    [self.loginV.registerView.sendCheckCodeBtn setTitle:[NSString stringWithFormat:@"重新发送(%ld)", countDown] forState:UIControlStateNormal];
+    
+    if (countDown == 0) {
+        self.loginV.registerView.sendCheckCodeBtn.enabled = YES;
+        [_timer invalidate];
+        _timer = nil;
+        countDown = 60;
+        self.loginV.registerView.sendCheckCodeBtn.titleLabel.text = @"发送验证码";
+        [self.loginV.registerView.sendCheckCodeBtn setTitle:@"发送验证码" forState:UIControlStateNormal];
+    }
+}
+
+#pragma mark - 查看用户列表
+- (void)dropUserDidClicked:(UIButton *)sender {
+    if (sender.selected) {
+        [UIView animateWithDuration:0.5 animations:^{
+            CGFloat x      = _loginV.historyUserDropList.origin.x;
+            CGFloat y      = _loginV.historyUserDropList.origin.y;
+            CGFloat width  = _loginV.historyUserDropList.width;
+            CGRect frame = CGRectMake(x, y, width, 0);
+            _loginV.historyUserDropList.frame = frame;
+        }];
+    }
+    else {
+        [UIView animateWithDuration:0.5 animations:^{
+            CGFloat x      = _loginV.historyUserDropList.origin.x;
+            CGFloat y      = _loginV.historyUserDropList.origin.y;
+            CGFloat width  = _loginV.historyUserDropList.width;
+            CGRect frame = CGRectMake(x, y, width, self.historyUsers.count*30);
+            _loginV.historyUserDropList.frame = frame;
+        }];
+    }
+    sender.selected = !sender.selected;
+}
+
+#pragma mark - 清空文本框
+- (void)clearInputView {
+    _loginV.nameField.text     = @"";
+    _loginV.passWordField.text = @"";
+}
+#pragma mark - 文本框退出焦点
+- (void)allTextResignFirstRespond {
+    [_loginV.nameField resignFirstResponder];
+    [_loginV.passWordField resignFirstResponder];
+    [_loginV allRegisterTextResignFirstRespond];
+    
+    [UIView animateWithDuration:0.5 animations:^{
+        CGFloat x      = _loginV.historyUserDropList.origin.x;
+        CGFloat y      = _loginV.historyUserDropList.origin.y;
+        CGFloat width  = _loginV.historyUserDropList.width;
+        CGRect frame = CGRectMake(x, y, width, 0);
+        _loginV.historyUserDropList.frame = frame;
+    }];
+}
+
+- (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    [self allTextResignFirstRespond];
+}
+
+#pragma mark - UITableView Delegate&DataSource
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
+    return self.historyUsers.count;
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    User *user = self.historyUsers[indexPath.row];
+    
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"cell"];
+    if (!cell) {
+        cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"cell"];
+    }
+    cell.backgroundColor = UIColorHex(ffffff76);
+    cell.textLabel.text = user.login_name;
+    cell.selectionStyle = UITableViewCellSelectionStyleNone;
+    return cell;
+}
+
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    User *user = self.historyUsers[indexPath.row];
+    _loginV.nameField.text     = user.login_name;
+    if (user.isRememberPwd) {
+        _loginV.passWordField.text = user.password;
+        _loginV.rememberPwd.selected = YES;
+    }
+    else {
+        _loginV.passWordField.text = @"";
+        _loginV.rememberPwd.selected = NO;
+    }
+    
+    [self dropUserDidClicked:_loginV.historyUserDrop];
+}
+
+#pragma mark - MBProgeressHudDelegate
+- (void)hudWasHidden:(MBProgressHUD *)hud {
+    [hud removeFromSuperview];
+    
+    hud = nil;
+}
+
+- (BOOL)isExistHudInView:(UIView *)view {
+    NSArray *huds = [MBProgressHUD allHUDsForView:view];
+    if (huds.count>0) {
+        return YES;
+    }
+    else {
+        return NO;
+    }
+}
+
+#pragma mark - properties
+- (LoginApi *)api {
+    if (!_api) {
+        _api = [LoginApi biz];
+    }
+    return _api;
+}
+
+@end

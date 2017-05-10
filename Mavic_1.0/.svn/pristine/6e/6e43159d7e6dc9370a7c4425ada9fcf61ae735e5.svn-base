@@ -1,0 +1,20 @@
+//
+//  ResultViewController.h
+//  Mavic
+//
+//  Created by XiaoQiang on 2017/4/27.
+//  Copyright © 2017年 LoHas-Tech. All rights reserved.
+//
+
+#import <UIKit/UIKit.h>
+#import "ResultModel.h"
+
+
+typedef void(^UploadBlock)();
+
+@interface ResultViewController : UIViewController
+
+@property (nonatomic, copy) UploadBlock uploadBlock;
+@property (nonatomic, strong) ResultModel *resultModel;
+
+@end

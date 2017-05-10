@@ -1,0 +1,87 @@
+//
+//  ResultViewController.m
+//  Mavic
+//
+//  Created by XiaoQiang on 2017/4/27.
+//  Copyright © 2017年 LoHas-Tech. All rights reserved.
+//
+
+#import "ResultViewController.h"
+#import "MeasureViewController.h"
+#import "ViewController.h"
+#import "MNaviView.h"
+#import "YYKit.h"
+#import "NSDate+YYAdd.h"
+#import "RFModel.h"
+
+@interface ResultViewController ()
+
+@property (nonatomic, strong) MNaviView      *naviContainView;
+@property (nonatomic, strong) UIImageView    *icon;
+@property (nonatomic, strong) UILabel        *infoLabel;
+@property (nonatomic, strong) UILabel        *timerLabel;
+@property (nonatomic, strong) ViewController *mainVC;
+@property (nonatomic, strong) MeasureViewController *measureVC;
+
+@property (nonatomic, strong) RFModel        *rfModel;
+
+@end
+
+@implementation ResultViewController
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    [self reloadData];
+    [self setSubViews];
+}
+
+- (void)didReceiveMemoryWarning {
+    [super didReceiveMemoryWarning];
+    
+}
+
+- (void)reloadData {
+    [self.rfModel reloadData];
+}
+
+- (void)setSubViews {
+    _naviContainView = [[MNaviView alloc] initWithFrame:CGRectMake(12, 12, self.view.width - 24, 44)];
+    
+    [self.view addSubview:_naviContainView];
+    
+    _icon = [[UIImageView alloc] initWithFrame:CGRectMake(20, 7, 30, 30)];
+    _icon.image = [UIImage imageNamed:@"male"];
+    [_naviContainView addSubview:_icon];
+    
+    _infoLabel = [[UILabel alloc] initWithFrame:CGRectMake(80, 0, 1000-80, 44)];
+    _infoLabel.text = [self.rfModel getPatientInfoWithStep:MeasureStep_Result];
+    _infoLabel.font = [UIFont systemFontOfSize:15];
+    _infoLabel.textColor = UIColorHex(999999);
+    [_naviContainView addSubview:_infoLabel];
+    
+    _naviContainView.timerLabel.text = [[NSDate date] stringWithFormat:@"yyyy年MM月dd日 HH:mm" timeZone:[NSTimeZone systemTimeZone] locale:[NSLocale currentLocale]];
+    _naviContainView.timerLabel.textColor = UIColorHex(999999);
+    
+    _mainVC = (ViewController *)self.parentViewController.parentViewController;
+    [_mainVC.backBtn removeAllTargets];
+    for (UIView *v in _mainVC.naviBarView.subviews) {
+        if ([v isKindOfClass:[UIButton class]]) {
+            v.hidden = NO;
+            _mainVC.backBtn = (UIButton *)v;
+            [_mainVC.backBtn addTarget:self action:@selector(commit) forControlEvents:UIControlEventTouchUpInside];
+        }
+    }
+    
+    
+}
+
+#pragma mark - properties 
+- (RFModel *)rfModel {
+    if (!_rfModel) {
+        _rfModel = [[RFModel alloc] init];
+    }
+    return _rfModel;
+}
+
+
+@end

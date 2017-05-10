@@ -1,0 +1,384 @@
+//
+//  DevicesViewController.m
+//  Mavic
+//
+//  Created by zhangxiaoqiang on 2017/4/4.
+//  Copyright © 2017年 LoHas-Tech. All rights reserved.
+//
+
+#include <sys/time.h>
+#import "DevicesViewController.h"
+#import "BLEManager.h"
+#import "BLEGATTService.h"
+#import "YYKit.h"
+#import "DevicesView.h"
+#import "DeviceManager.h"
+
+@interface DevicesViewController() <UITextFieldDelegate,BLEManagerDelegate, UITableViewDataSource, UITableViewDelegate, UIGestureRecognizerDelegate>
+{
+    Peripheral *L_T_Peripheral;
+    Peripheral *L_B_Peripheral;
+    Peripheral *R_T_Peripheral;
+    Peripheral *R_B_Peripheral;
+}
+@property (weak, nonatomic) IBOutlet UITableView *peripheralTableView;
+@property (weak, nonatomic)          DevicesView *devicesView;
+
+@property (strong, nonatomic) NSMutableArray   *listDataPeripheral;
+@property (strong, nonatomic) NSMutableArray   *listDataSelectPeripherals;
+@property (strong, nonatomic) NSMutableArray   *listDataAdvertisement;
+@property (strong, nonatomic) NSMutableArray   *listDataRSSI;
+@property (strong, nonatomic) UIRefreshControl *refresh;
+
+@property (strong, nonatomic) UITapGestureRecognizer *tapRecognizer;
+
+
+- (IBAction)back:(id)sender;
+
+@end
+
+@implementation DevicesViewController
+
+- (void)viewDidLoad
+{
+    [super viewDidLoad];
+    NSLog(@"[BLEDevicesViewController]viewDidLoad");
+    NSLog(@"[BLEDevicesViewController]Set BLEManager Deleagte to %@", self);
+    
+    //用于保存peripheralTableView数据的数组
+    _listDataRSSI              = [[NSMutableArray alloc] init];
+    _listDataPeripheral        = [[NSMutableArray alloc] init];
+    _listDataAdvertisement     = [[NSMutableArray alloc] init];
+    _listDataSelectPeripherals = [[NSMutableArray alloc] init];
+    
+    self.peripheralTableView.hidden = YES;
+//    [self setBeginRefreshing];
+    
+    [self.devicesView.researchBtn addTarget:self
+                                     action:@selector(researchBtnDidClicked:)
+                           forControlEvents:UIControlEventTouchUpInside];
+    
+    DeviceManager *dm = [DeviceManager defaultManager];
+    L_T_Peripheral = dm.L_T_Aid;
+    L_B_Peripheral = dm.L_B_Aid;
+    R_T_Peripheral = dm.R_T_Aid;
+    R_B_Peripheral = dm.R_B_Aid;
+    
+}
+
+- (void)viewDidAppear:(BOOL)animated {
+    [super viewDidAppear:animated];
+    NSLog(@"[BLEDevicesViewController]viewDidAppear");
+    NSLog(@"[BLEDevicesViewController]Set BLEManager deleagte to %@", self);
+    //ViewController实现BLEServiceDelegate和LeDiscoveryDelegate协议
+    [BLEMANAGER setDelegate:self];
+    NSLog(@"[BLEDevicesViewController]Start scan...");
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [BLEMANAGER scanForPeripherals:nil];
+    });
+    
+    [_peripheralTableView reloadData];
+    
+    // 关于FormSheet模式下 蒙板手势dismiss
+    _tapRecognizer = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleTapBehind:)];
+    [_tapRecognizer setNumberOfTapsRequired:1];
+    _tapRecognizer.cancelsTouchesInView = NO; //So the user can still interact with controls in the modal view
+    [self.view.window addGestureRecognizer:_tapRecognizer];
+    [_tapRecognizer setDelegate:(id<UIGestureRecognizerDelegate>)self];
+}
+
+- (void)viewDidDisappear:(BOOL)animated {
+    NSLog(@"[BLEDevicesViewController]viewDidDisappear");
+    NSLog(@"[BLEDevicesViewController]Stop Scan");
+    [BLEMANAGER stopScan];
+}
+
+#pragma mark - 点击蒙板，dismiss控制器
+- (void)handleTapBehind:(UITapGestureRecognizer *)sender {
+    if (sender.state == UIGestureRecognizerStateEnded) {
+        
+        // passing nil gives us coordinates in the window
+        CGPoint location = [sender locationInView:nil];
+        
+        // swap (x,y) on iOS 8 in landscape
+        if ([[[UIDevice currentDevice] systemVersion] integerValue] >= 8) {
+            if (UIInterfaceOrientationIsLandscape([UIApplication sharedApplication].statusBarOrientation)) {
+                location = CGPointMake(location.y, location.x);
+            }
+        }
+        
+        // convert the tap's location into the local view's coordinate system, and test to see if it's in or outside. If outside, dismiss the view.
+        if (![self.view pointInside:[self.view convertPoint:location fromView:self.view.window] withEvent:nil]) {
+            
+            // remove the recognizer first so it's view.window is valid
+            [self.view.window removeGestureRecognizer:sender];
+            NSLog(@"[BLEDevicesViewController]back");
+            NSLog(@"[BLEDevicesViewController]Set BLEManager deleagte to %@", nil);
+            [BLEMANAGER setDelegate:nil];
+            self.measureVC = nil;
+            [self dismissViewControllerAnimated:YES completion:nil];
+        }
+    }
+}
+
+- (IBAction)back:(id)sender {
+    NSLog(@"[BLEDevicesViewController]back");
+    NSLog(@"[BLEDevicesViewController]Set BLEManager deleagte to %@", nil);
+    [BLEMANAGER setDelegate:nil];
+    self.measureVC = nil;
+    [self dismissViewControllerAnimated:false completion:nil];
+}
+
+- (void)researchBtnDidClicked:(UIButton *)sender {
+    [BLEMANAGER stopScan];
+    [_listDataRSSI removeAllObjects];
+    [_listDataPeripheral removeAllObjects];
+    [_listDataAdvertisement removeAllObjects];
+    [_listDataSelectPeripherals removeAllObjects];
+    [self.peripheralTableView reloadData];
+    self.peripheralTableView.hidden = YES;
+    [self.devicesView showLoaingView:YES];
+    [self refreshTableviewAction:_refresh];
+}
+
+
+#pragma mark - 刷新控制 暂时不用下拉刷新
+#pragma mark 开始刷新
+- (void)setBeginRefreshing
+{
+    _refresh = [[UIRefreshControl alloc]init];
+    //刷新图形颜色
+    _refresh.tintColor = [UIColor lightGrayColor];
+    //刷新的标题
+    _refresh.attributedTitle = [[NSAttributedString alloc] initWithString:@"下拉搜索"];
+    
+    // UIRefreshControl 会触发一个UIControlEventValueChanged事件，通过监听这个事件，我们就可以进行类似数据请求的操作了
+    [_refresh addTarget:  self action:@selector(refreshTableviewAction:) forControlEvents:UIControlEventValueChanged];
+    self.peripheralTableView.refreshControl = _refresh;
+    
+}
+
+-(void)refreshTableviewAction:(UIRefreshControl *)refreshs
+{
+    [_listDataPeripheral removeAllObjects];
+    [_listDataAdvertisement removeAllObjects];
+    [_listDataRSSI removeAllObjects];
+    
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [BLEMANAGER scanForPeripherals:nil];
+    });
+    NSLog(@"[BLEDevicesViewController]Start scan...");
+    
+    [self.peripheralTableView.refreshControl endRefreshing];
+    /*
+     if (refreshs.refreshing) {
+     refreshs.attributedTitle = [[NSAttributedString alloc]initWithString:@"正在搜索"];
+     [self performSelector:@selector(endRefresh) withObject:nil afterDelay:1];
+     }
+     */
+}
+
+#pragma mark 停止刷新
+-(void)endRefresh
+{
+    NSDateFormatter *formatter = [[NSDateFormatter alloc]init];
+    [formatter setDateFormat:@"yyyy-MM-dd HH:mm:ss"]; //创建的时间格式
+    
+    NSString *lastUpdated = [NSString stringWithFormat:@"上一次更新时间为 %@", [formatter stringFromDate:[NSDate date]]];
+    
+    self.peripheralTableView.refreshControl.attributedTitle = [[NSAttributedString alloc] initWithString:lastUpdated] ;
+    [self.peripheralTableView.refreshControl endRefreshing];
+}
+
+#pragma mark - 代理:BTManagerDelegate
+
+- (void) didUpdateState:(CBManagerState) state {
+    NSLog(@"[BLEDevicesViewController]BLEManager state changed to %ld", (long)state);
+}
+
+#pragma mark 发现设备
+- (void) didPeripheralFound:(CBPeripheral *)peripheral advertisementData:(BLEAdvertisementData *)advertisementData RSSI:(NSNumber *)RSSI {
+    NSLog(@"[BLEDevicesViewController]Device found:%@", peripheral.name);
+    
+    if ([peripheral.identifier.UUIDString isEqualToString:L_T_Peripheral.identifier]||[peripheral.identifier.UUIDString isEqualToString:L_B_Peripheral.identifier]||[peripheral.identifier.UUIDString isEqualToString:R_T_Peripheral.identifier]||[peripheral.identifier.UUIDString isEqualToString:R_B_Peripheral.identifier]) {
+        return;
+    }
+    if ([_listDataPeripheral indexOfObjectIdenticalTo:peripheral] == LONG_MAX) {
+        NSLog(@"[BLEDevicesViewController]Add device to list");
+        [_listDataPeripheral addObject:peripheral];
+        [_listDataAdvertisement addObject:advertisementData];
+        [_listDataRSSI addObject:RSSI];
+        
+        // 将搜到的符合Mac地址的外设加入数组
+        NSData *data = advertisementData.manufacturerData;
+        NSString *mac = [self convertToNSStringWithNSData:data];
+        mac = [mac stringByReplacingOccurrencesOfString:@" " withString:@""];
+        if ([mac isEqualToString:@"0000001583123456"] || [mac isEqualToString:@"0000001583654321"]) {
+            if (![_listDataSelectPeripherals containsObject:peripheral]) {
+                [_listDataSelectPeripherals addObject:peripheral];
+            }
+            
+        }
+    } else {
+        NSUInteger i = [_listDataPeripheral indexOfObjectIdenticalTo:peripheral];
+        [_listDataRSSI removeObjectAtIndex:i];
+        [_listDataRSSI insertObject:RSSI atIndex:i];
+        NSLog(@"[BLEDevicesViewController]Device exist");
+        
+        
+    }
+    if (_listDataPeripheral.count >= 4) {
+        [self.devicesView     showLoaingView:NO];
+        [_peripheralTableView setHidden:NO];
+        [_peripheralTableView reloadData];
+    }
+}
+
+#pragma mark 连接成功
+- (void) didConnectPeripheral:(CBPeripheral *)peripheral {
+    NSLog(@"+++%@[BLEDevicesViewController]Connected", peripheral.name);
+    for (int i = 0; i < _listDataPeripheral.count; i++) {
+        if ([_listDataPeripheral objectAtIndex:i] == peripheral) {
+            [_peripheralTableView selectRowAtIndexPath:[NSIndexPath indexPathForRow:i inSection:0] animated:false scrollPosition:UITableViewScrollPositionNone];
+            [BLEMANAGER setDelegate:self.measureVC];
+            BLEAdvertisementData *bleAdvertisementData = (BLEAdvertisementData *)[_listDataAdvertisement objectAtIndex:i];
+            NSData *data = bleAdvertisementData.manufacturerData;
+            NSString *mac = [self convertToNSStringWithNSData:data];
+            mac = [mac stringByReplacingOccurrencesOfString:@" " withString:@""];
+            Peripheral *m_peripheral = [[Peripheral alloc] initWithCBPeripheral:peripheral];
+            m_peripheral.macString   = mac;
+            [self dismissViewControllerAnimated:YES completion:^{
+                self.cpBlock(m_peripheral, peripheral);
+            }];
+//            BLEServicesViewController *viewController = [[UIStoryboard storyboardWithName:@"Main" bundle:nil] instantiateViewControllerWithIdentifier:@"BLEServicesViewController"];
+//
+//            // 查找当前的外设，将没有连接的另一个外设建立连接
+//            for (CBPeripheral *p in _listDataSelectPeripherals) {
+//                if (p.state == CBPeripheralStateDisconnected) {
+//                    viewController.secondPeripheral = p;
+//                    NSInteger index = [_listDataPeripheral indexOfObject:p];
+//                    viewController.secondPeripheralData = [_listDataAdvertisement objectAtIndex:index];
+//                }
+//            }
+//            [self presentViewController:viewController animated:YES completion:nil];
+//            
+//            [viewController setPeripheral:peripheral rssi:[_listDataRSSI objectAtIndex:i] advertisementData:[_listDataAdvertisement objectAtIndex:i]];
+        }
+    }
+}
+
+#pragma mark 连接失败
+- (void) didFailToConnectPeripheral:(CBPeripheral *)peripheral error:(nullable NSError *)error {
+    NSLog(@"[BLEDevicesViewController]Fail to connect");
+}
+
+#pragma mark 连接断开
+- (void) didDisconnectPeripheral:(CBPeripheral *)peripheral error:(nullable NSError *)error {
+    NSLog(@"[BLEDevicesViewController]Disconnected");
+    for (int i = 0; i < _listDataPeripheral.count; i++) {
+        if ([_listDataPeripheral objectAtIndex:i] == peripheral) {
+            [_peripheralTableView deselectRowAtIndexPath:[NSIndexPath indexPathForRow:i inSection:0] animated:false];
+        }
+    }
+}
+
+#pragma mark 发现服务
+- (void) didServicesFound:(CBPeripheral *)peripheral services:(NSArray<CBPeripheral *> *)services {
+    NSLog(@"[BLEDevicesViewController]%lu services found", (unsigned long)services.count);
+}
+
+#pragma mark - 代理:UITableViewDataSource
+
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
+    return _listDataPeripheral.count;
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"peripheralTableViewItem"];
+    if (!cell) {
+        cell = [[UITableViewCell alloc]initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:@"peripheralTableViewItem"];
+    }
+    if (_listDataPeripheral.count > indexPath.row) {
+        CBPeripheral *peripheral = (CBPeripheral *)[_listDataPeripheral objectAtIndex:indexPath.row];
+        NSNumber *rssi = (NSNumber *)[_listDataRSSI objectAtIndex:indexPath.row];
+        BLEAdvertisementData *bleAdvertisementData = (BLEAdvertisementData *)[_listDataAdvertisement objectAtIndex:indexPath.row];
+        if(peripheral.name.length == 0) {
+            [cell.textLabel setText:@"Unknown"];
+        } else {
+            [cell.textLabel setText:peripheral.name];
+        }
+        
+        NSData *data = bleAdvertisementData.manufacturerData;
+        NSString *mac = [self convertToNSStringWithNSData:data];
+        mac = [mac stringByReplacingOccurrencesOfString:@" " withString:@""];
+        
+//        [cell.detailTextLabel setText:[NSString stringWithFormat:@"<RSSI:%d>,<TxPowerLevel=%d>,<%lu services>,<MAC:%@>", rssi.intValue, bleAdvertisementData.txPowerLevel.intValue ,(unsigned long)bleAdvertisementData.serviceUUIDs.count, mac]];
+        [cell.detailTextLabel setText:[NSString stringWithFormat:@"<%lu services>,<MAC:%@>", (unsigned long)bleAdvertisementData.serviceUUIDs.count, mac]];
+    }
+    
+    return cell;
+}
+
+- (NSString *)convertToNSStringWithNSData:(NSData *)data
+{
+    NSMutableString *strTemp = [NSMutableString stringWithCapacity:[data length]*2];
+    
+    const unsigned char *szBuffer = [data bytes];
+    
+    for (NSInteger i=0; i < [data length]; ++i) {
+        
+        [strTemp appendFormat:@"%02lx",(unsigned long)szBuffer[i]];
+        
+    }
+    
+    return strTemp;
+}
+
+#pragma mark  点击TableView条目时，连接/断开条目对应的Peripheral
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    CBPeripheral *peripheral = (CBPeripheral *)[_listDataPeripheral objectAtIndex:indexPath.row];
+    switch ([peripheral state]) {
+        case CBPeripheralStateConnected:
+            NSLog(@"[BLEDevicesViewController]Disconnect...");
+            [BLEMANAGER disconnect:peripheral];
+            break;
+        case CBPeripheralStateDisconnected:
+            NSLog(@"[BLEDevicesViewController]Stop scan...");
+            [BLEMANAGER stopScan];
+            [tableView deselectRowAtIndexPath:indexPath animated:true];
+            NSLog(@"[BLEDevicesViewController]Connect...");
+            [BLEMANAGER connect:peripheral];
+            break;
+        default:
+            break;
+    }
+}
+
+- (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
+    return 53;
+}
+
+#pragma mark - UIGestureRecognizer Delegate
+- (BOOL)gestureRecognizerShouldBegin:(UIGestureRecognizer *)gestureRecognizer
+{
+    return YES;
+}
+
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer
+{
+    return YES;
+}
+
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldReceiveTouch:(UITouch *)touch
+{
+    return YES;
+}
+
+#pragma mark - properties
+- (DevicesView *)devicesView {
+    return (DevicesView *)self.view;
+}
+
+
+
+@end

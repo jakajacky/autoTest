@@ -1,0 +1,200 @@
+//
+//  SettingViewController.m
+//  Mavic
+//
+//  Created by zhangxiaoqiang on 2017/4/1.
+//  Copyright © 2017年 LoHas-Tech. All rights reserved.
+//
+
+#import "SettingViewController.h"
+#import "SettingView.h"
+#import "SettingCell.h"
+#import "LoginManager.h"
+
+#import "LoginApi.h"
+#import "UIImage+memory.h"
+
+@interface SettingViewController ()<UITableViewDelegate, UITableViewDataSource>
+
+@property (nonatomic, strong) SettingView *settingView;
+
+@property (nonatomic, strong) LoginApi *api;
+
+@property (weak, nonatomic) IBOutlet UIButton *addUser;
+
+
+@end
+
+@implementation SettingViewController
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    // Do any additional setup after loading the view.
+    self.view.backgroundColor = UIColorHex(3c5a78);
+    
+    _settingView = (SettingView *)self.view;
+    
+    UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc]
+                                   initWithTarget:self
+                                   action:@selector(settingDidClicked:)];
+    
+    [_settingView.bottom_container addGestureRecognizer:tap];
+    
+    _settingView.middle_table.delegate      = self;
+    _settingView.middle_table.dataSource    = self;
+    _settingView.middle_table.scrollEnabled = NO;
+    
+    [_settingView.middle_table registerNib:[UINib nibWithNibName:@"SettingCell"
+                                                          bundle:[NSBundle mainBundle]]
+                    forCellReuseIdentifier:@"settingCell"];
+    
+    [_addUser addTarget:self action:@selector(addUserBtnDidClicked:) forControlEvents:UIControlEventTouchUpInside];
+    
+    NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
+    [center addObserver:self selector:@selector(reloadIconWithGender:) name:@"HeadIconDidChangeNotification" object:nil];
+    
+}
+
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    // 将设置（退出）按钮还原
+    _settingView.bottom_container.backgroundColor = [UIColor clearColor];
+    _settingView.bottom_container_isSelectedImg.hidden = YES;
+}
+
+- (void)viewDidAppear:(BOOL)animated {
+    [super viewDidAppear:animated];
+    // 默认选择第一个cell
+    [_settingView.middle_table selectRowAtIndexPath:[NSIndexPath indexPathForRow:0 inSection:0] animated:YES scrollPosition:UITableViewScrollPositionTop];
+    [self settingCellDidSelected:YES
+                       WithTable:_settingView.middle_table
+                           Index:[NSIndexPath indexPathForRow:0 inSection:0]];
+}
+
+- (void)didReceiveMemoryWarning {
+    [super didReceiveMemoryWarning];
+    // Dispose of any resources that can be recreated.
+}
+
+#pragma mark - 设置点击事件
+- (void)settingDidClicked:(UITapGestureRecognizer *)tap {
+    [_settingView.middle_table reloadData];
+    _settingView.bottom_container.backgroundColor      = UIColorHex(00000051);
+    _settingView.bottom_container_isSelectedImg.hidden = NO;
+    
+    [self logoutCurrentUser];
+}
+
+#pragma mark - 添加 点击事件
+-(void)addUserBtnDidClicked:(UIButton *)sender {
+    NSLog(@"clicked");
+    NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
+    [center postNotificationName:@"AddUserNotification" object:nil];
+}
+
+#pragma mark - 暂时模拟退出帐号
+- (void)logoutCurrentUser{
+    User *user = [LoginManager defaultManager].currentUser;
+    user.isLatestLogin = NO;
+    
+    [self.api saveCurrentUser:user];
+    [self.api deletePatientDatabase];
+    [LoginManager defaultManager].currentPatient = nil;
+    
+    NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
+    [center postNotificationName:LogoutNotification object:nil];
+    
+    [self.parentViewController viewDidAppear:YES];
+    
+}
+
+#pragma mark - tableView Delegate&Datasource
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
+    return 3;
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    SettingCell *cell = [tableView dequeueReusableCellWithIdentifier:@"settingCell" forIndexPath:indexPath];
+
+    cell.backgroundColor        = [UIColor clearColor];
+    cell.contentLabel.textColor = UIColorHex(ffffff);
+    cell.selectionStyle         = UITableViewCellSelectionStyleNone;
+    cell.isSelectedImg.hidden   = YES;
+    
+    switch (indexPath.row) {
+        case 0:
+            cell.contentLabel.text = @"测量";
+            cell.imageView.image   = [UIImage imageWithMName:@"measure"];
+            break;
+        case 1:
+            cell.contentLabel.text = @"数据";
+            cell.imageView.image   = [UIImage imageWithMName:@"history"];
+            break;
+        case 2:
+            cell.contentLabel.text = @"设备";
+            cell.imageView.image   = [UIImage imageWithMName:@"device"];
+            break;
+        default:
+            break;
+    }
+    
+    return cell;
+}
+
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    NSLog(@"--%ld--tap", indexPath.row);
+    [self settingCellDidSelected:YES WithTable:tableView Index:indexPath];
+    _settingView.bottom_container.backgroundColor      = [UIColor clearColor];
+    _settingView.bottom_container_isSelectedImg.hidden = YES;
+    if (indexPath.row == 0) {
+        _settingView.top_container.userInteractionEnabled = YES;
+        NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
+        [center postNotificationName:@"MeasureNotification" object:nil];
+    }
+    if (indexPath.row == 2) {
+        NSLog(@"device");
+        _settingView.top_container.userInteractionEnabled = NO;
+        NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
+        [center postNotificationName:@"DeviceListNotification" object:nil];
+    }
+}
+
+- (void)tableView:(UITableView *)tableView didDeselectRowAtIndexPath:(NSIndexPath *)indexPath {
+    NSLog(@"--%ld--up", indexPath.row);
+    [self settingCellDidSelected:NO WithTable:tableView Index:indexPath];
+}
+
+- (void)settingCellDidSelected:(BOOL)selected WithTable:(UITableView *)tableView Index:(NSIndexPath *)indexPath {
+    if (selected) {
+        SettingCell *cell         = [tableView cellForRowAtIndexPath:indexPath];
+        cell.backgroundColor      = UIColorHex(00000051);
+        cell.isSelectedImg.hidden = NO;
+    }
+    else {
+        SettingCell *cell         = [tableView cellForRowAtIndexPath:indexPath];
+        cell.backgroundColor      = [UIColor clearColor];
+        cell.isSelectedImg.hidden = YES;
+    }
+}
+
+- (void)reloadIconWithGender:(NSNotification *)noti {
+    if ([noti.object isEqualToString:@"男"]) {
+        self.settingView.head_icon.image = [UIImage imageNamed:@"male"];
+    }
+    else if ([noti.object isEqualToString:@"女"]) {
+        self.settingView.head_icon.image = [UIImage imageNamed:@"female"];
+    }
+    else {
+        self.settingView.head_icon.image = [UIImage imageNamed:@"add"];
+    }
+}
+
+#pragma mark - properties
+- (LoginApi *)api {
+    if (!_api) {
+        _api = [LoginApi biz];
+    }
+    return _api;
+}
+
+@end

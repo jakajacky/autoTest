@@ -1,0 +1,251 @@
+//
+//  ResultViewController.m
+//  Mavic
+//
+//  Created by XiaoQiang on 2017/4/27.
+//  Copyright © 2017年 LoHas-Tech. All rights reserved.
+//
+
+#import "ResultViewController.h"
+#import "MeasureViewController.h"
+#import "SettingViewController.h"
+#import "ViewController.h"
+#import "ResultView.h"
+#import "MNaviView.h"
+#import "YYKit.h"
+#import "NSDate+YYAdd.h"
+#import "RFModel.h"
+#import "UIImage+memory.h"
+#import "MeasureManager.h"
+
+@interface ResultViewController ()<UIPrintInteractionControllerDelegate>
+
+@property (nonatomic, strong) ResultView     *resultView;
+@property (nonatomic, strong) MNaviView      *naviContainView;
+@property (nonatomic, strong) UIImageView    *icon;
+@property (nonatomic, strong) UILabel        *infoLabel;
+@property (nonatomic, strong) UILabel        *timerLabel;
+@property (nonatomic, strong) ViewController *mainVC;
+@property (nonatomic, strong) MeasureViewController *measureVC;
+
+@property (nonatomic, strong) RFModel        *rfModel;
+
+
+
+@end
+
+@implementation ResultViewController
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    
+    [self reloadData];
+    [self setSubViews];
+}
+
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    self.resultView.backgroundColor = UIColorHex(eef8fa);
+}
+
+- (void)viewDidAppear:(BOOL)animated {
+    [super viewDidAppear:animated];
+    
+}
+
+- (void)viewDidDisappear:(BOOL)animated {
+    [super viewDidDisappear:animated];
+    
+//    self.api = nil;
+//    [_lineView_LB removeFromSuperview];
+//    [_lineView_LT removeFromSuperview];
+//    [_lineView_RB removeFromSuperview];
+//    [_lineView_RT removeFromSuperview];
+//    _lineView_LB = nil;
+//    _lineView_LT = nil;
+//    _lineView_RB = nil;
+//    _lineView_RT = nil;
+    
+    //    [MeasureManager defaultManager].lb_q_str = nil;
+    //    [MeasureManager defaultManager].lb_i_str = nil;
+    //    [MeasureManager defaultManager].lt_q_str = nil;
+    //    [MeasureManager defaultManager].lt_i_str = nil;
+    //    [MeasureManager defaultManager].rb_q_str = nil;
+    //    [MeasureManager defaultManager].rb_i_str = nil;
+    //    [MeasureManager defaultManager].rt_q_str = nil;
+    //    [MeasureManager defaultManager].rt_i_str = nil;
+    //    [[MeasureManager defaultManager].lt_rf_list removeAllObjects];
+    //    [[MeasureManager defaultManager].lb_rf_list removeAllObjects];
+    //    [[MeasureManager defaultManager].rt_rf_list removeAllObjects];
+    //    [[MeasureManager defaultManager].rb_rf_list removeAllObjects];
+    [[MeasureManager defaultManager] clearAllCache];
+    
+    //    self.view = nil;
+    self.naviContainView = nil;
+    self.icon = nil;
+    self.infoLabel = nil;
+    self.timerLabel = nil;
+    //    self.startMeasureBtn = nil;
+//    [self.subThread cancel];
+//    self.subThread = nil;
+//    
+//    [_popDataTimer invalidate];
+//    _popDataTimer = nil;
+//    
+//    [_timer invalidate];
+//    _timer = nil;
+    
+//    NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
+//    [center removeObserver:self];
+}
+
+- (void)didReceiveMemoryWarning {
+    [super didReceiveMemoryWarning];
+    
+}
+
+- (void)reloadData {
+    [self.rfModel reloadData];
+}
+
+- (void)setSubViews {
+    _naviContainView = [[MNaviView alloc] initWithFrame:CGRectMake(12, 12, self.view.width - 24, 44)];
+    
+    [self.resultView addSubview:_naviContainView];
+    
+    _icon = [[UIImageView alloc] initWithFrame:CGRectMake(20, 7, 30, 30)];
+    _icon.image = self.rfModel.isMale?[UIImage imageWithMName:@"male"]:[UIImage imageWithMName:@"female"];
+    [_naviContainView addSubview:_icon];
+    
+    self.resultView.baPWVCoordinationView.image = self.rfModel.isMale?[UIImage imageWithMName:@"malePWV"]:[UIImage imageWithMName:@"femalePWV"];
+    
+    _infoLabel = [[UILabel alloc] initWithFrame:CGRectMake(80, 0, 1000-80, 44)];
+    _infoLabel.text = [self.rfModel getPatientInfoWithStep:MeasureStep_Result];
+    _infoLabel.font = [UIFont systemFontOfSize:15];
+    _infoLabel.textColor = UIColorHex(999999);
+    [_naviContainView addSubview:_infoLabel];
+    
+    _naviContainView.timerLabel.text = [[NSDate date] stringWithFormat:@"yyyy年MM月dd日 HH:mm" timeZone:[NSTimeZone systemTimeZone] locale:[NSLocale currentLocale]];
+    _naviContainView.timerLabel.textColor = UIColorHex(999999);
+    
+    _mainVC = (ViewController *)self.parentViewController.parentViewController;
+    [_mainVC.backBtn removeAllTargets];
+    for (UIView *v in _mainVC.naviBarView.subviews) {
+        if ([v isKindOfClass:[UIButton class]]) {
+            v.hidden = NO;
+            _mainVC.backBtn = (UIButton *)v;
+            [_mainVC.backBtn addTarget:self action:@selector(commit) forControlEvents:UIControlEventTouchUpInside];
+        }
+    }
+    
+    // 血管硬度 坐标标注
+    self.resultView.left_baPWV.text = [NSString stringWithFormat:@"%.0f", self.resultModel.l_pwv];
+    self.resultView.right_baPWV.text = [NSString stringWithFormat:@"%.0f", self.resultModel.r_pwv];
+    
+    int left_baPWV = 1380;
+    int right_baPWV = 1500;
+    
+    CGPoint left_baPWV_point = [self realCoordinationConvertFromPWVCoordination:CGPointMake(self.rfModel.age, left_baPWV)];
+    
+    self.resultView.leftAnchor.center = CGPointMake(left_baPWV_point.x, left_baPWV_point.y-7);
+    
+    CGPoint right_baPWV_point = [self realCoordinationConvertFromPWVCoordination:CGPointMake(self.rfModel.age, right_baPWV)];
+    self.resultView.rightAnchor.center = CGPointMake(right_baPWV_point.x, right_baPWV_point.y-7);
+    
+    
+    // 四路贴片信号强度
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        self.resultView.lt_qualityProgress.progress = self.resultModel.signalQuality_leftHand;
+        self.resultView.lb_qualityProgress.progress = self.resultModel.signalQuality_leftFoot;
+        self.resultView.rt_qualityProgress.progress = self.resultModel.signalQuality_rightHand;
+        self.resultView.rb_qualityProgress.progress = self.resultModel.signalQuality_rightFoot;
+    });
+    
+    // 中心-上臂-脚踝
+    NSString *center_upper_limbs = [NSString stringWithFormat:@"%.1f", 0.2195*self.rfModel.height-2.0734];
+    NSString *center_lower_limbs = [NSString stringWithFormat:@"%.1f", 0.8129*self.rfModel.height+12.328];
+    
+    self.resultView.center_upper_limbs.text = [NSString stringWithFormat:@"%@ cm",center_upper_limbs];
+    self.resultView.center_lower_limbs.text = [NSString stringWithFormat:@"%@ cm",center_lower_limbs];
+    self.resultView.upper_lower_limbs.text  = [NSString stringWithFormat:@"%.1f cm", center_lower_limbs.floatValue-center_upper_limbs.floatValue];
+    
+    [self.resultView.printBtn addTarget:self action:@selector(printBtnDidClicked:) forControlEvents:UIControlEventTouchUpInside];
+    
+}
+
+#pragma mark - 血管硬度参照表 坐标转换
+- (CGPoint)realCoordinationConvertFromPWVCoordination:(CGPoint)point {
+    CGFloat y = ((2600 - point.y)*3)/25.0;
+    CGFloat x = ((point.x - 20)*28)/5.0;
+    return CGPointMake(x, y);
+}
+
+- (void)commit {
+    [self dismissCurrentViewController];
+}
+
+#pragma mark - 打印
+- (void)printBtnDidClicked:(UIButton *)sender {
+    UIGraphicsBeginImageContextWithOptions(self.resultView.bounds.size, YES, self.resultView.layer.contentsScale);
+    
+    [self.resultView.layer renderInContext:UIGraphicsGetCurrentContext()];
+    
+    UIImage *image=UIGraphicsGetImageFromCurrentImageContext();
+    
+    UIGraphicsEndImageContext();
+    UIPrintInteractionController *pic = [UIPrintInteractionController sharedPrintController];
+    if  (pic && [UIPrintInteractionController canPrintData:UIImagePNGRepresentation(image)]) {
+        pic.delegate = self;
+        
+        UIPrintInfo *printInfo = [UIPrintInfo printInfo];
+        printInfo.outputType = UIPrintInfoOutputGeneral;
+        printInfo.jobName = @"test";
+        printInfo.duplex = UIPrintInfoDuplexLongEdge;
+        pic.printInfo = printInfo;
+//        pic.showsPageRange = YES;
+        pic.printingItem = image;
+        
+        void (^completionHandler)(UIPrintInteractionController *, BOOL, NSError *) =
+        ^(UIPrintInteractionController *pic, BOOL completed, NSError *error) {
+//            self.content = nil;
+            if (!completed && error)
+            NSLog(@"FAILED! due to error in domain %@ with error code %ld",
+                  error.domain, (long)error.code);
+        };
+        
+        [pic presentAnimated:YES completionHandler:completionHandler];
+    }
+}
+
+#pragma mark - dismiss 控制器
+- (void)dismissCurrentViewController {
+    [UIView animateWithDuration:0.35 animations:^{
+        self.view.frame = CGRectMake(_mainVC.view.width, 0, _mainVC.view.width, _mainVC.view.height);
+    } completion:^(BOOL finished) {
+        for (ViewController *vc in [_mainVC childViewControllers]) {
+            if ([vc isKindOfClass:[SettingViewController class]]) {
+                vc.view.userInteractionEnabled = YES;
+            }
+        }
+        [self.view removeFromSuperview];
+        [self removeFromParentViewController];
+        self.uploadBlock();
+    }];
+}
+
+
+
+
+#pragma mark - properties 
+- (RFModel *)rfModel {
+    if (!_rfModel) {
+        _rfModel = [[RFModel alloc] init];
+    }
+    return _rfModel;
+}
+
+- (ResultView *)resultView {
+    return (ResultView *)self.view;
+}
+
+@end

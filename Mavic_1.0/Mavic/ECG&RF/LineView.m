@@ -1,0 +1,370 @@
+//
+//  LineView.m
+//  Demo
+//
+//  Created by liuxingyu on 2017/4/11.
+//  Copyright © 2017年 zhumengjiao. All rights reserved.
+//
+
+#import "LineView.h"
+#import "YYKit.h"
+#import "LockSignal.h"
+#import "MeasureManager.h"
+#import "UIImage+memory.h"
+#define INITIALRATE 60000
+
+@interface LineView ()
+
+//整屏幕画的点总数是长度除以stepX
+//screenNumber = width/stepX;
+//baseBlank = (float)(height * 0.5);
+//k = baseBlank;
+{
+    NSMutableArray *_dataArray;
+    
+    NSMutableArray *_tempData;
+    
+    int   screenNumber;
+    int   baseline;
+    int   stepX;
+    int   rate;
+    float k;
+    float baseBlank;
+    
+    int   horizontalNum;
+    int   verticalNum;
+    int   highest_raw;
+    int   lowest_raw;
+    NSMutableArray *ptss;
+    
+    NSTimer *_popDataTimer;
+    
+    float lastY;
+    
+    AidPosition _postion;
+    NSArray     *_data;
+}
+
+@property (nonatomic, strong) LockSignal *ls;
+
+@end
+
+@implementation LineView
+
+- (instancetype)initWithFrame:(CGRect)frame position:(AidPosition)position  {
+    self = [super initWithFrame:frame];
+    if (self) {
+        stepX = 3;
+        rate  = INITIALRATE;
+        k     = -50;
+        
+        CGFloat width  = [UIScreen mainScreen].bounds.size.width;
+        CGFloat height = 135;
+        //整屏幕画的点总数是长度除以stepX
+        screenNumber = width/stepX;
+        baseBlank = (float)(height * 0.5);
+        k = baseBlank;
+        
+        _dataArray = [@[] mutableCopy];
+        _tempData =[NSMutableArray array];
+        
+        self.backgroundColor = [UIColor colorWithPatternImage:[UIImage imageWithMName:@"wave_bg"]];
+        [self addSubviews:position];
+        
+        _postion = position;
+        
+    }
+    return self;
+}
+
+- (void)addSubviews:(AidPosition)position {
+    UILabel *l = [[UILabel alloc] initWithFrame:CGRectMake(10, 10, 100, 30)];
+    [l setFont:[UIFont fontWithName:@ "Arial Rounded MT Bold"  size:(17.0)]];
+    [l setTextColor:UIColorHex(333333)];
+    switch (position) {
+        case AidPosition_LT:
+            l.text = @"左手肘";
+            break;
+        case AidPosition_RT:
+            l.text = @"右手肘";
+            break;
+        case AidPosition_LB:
+            l.text = @"左脚踝";
+            break;
+        case AidPosition_RB:
+            l.text = @"右脚踝";
+            break;
+        default:
+            break;
+    }
+    [self addSubview:l];
+    
+    _signalImg = [[UIImageView alloc] initWithFrame:CGRectMake(self.width-20-100, 0, 100, 30)];
+    _signalImg.image = [UIImage imageWithMName:@"unfound"];
+    [self addSubview:_signalImg];
+}
+
+#pragma mark - 画背景网格
+- (void)drawGrid:(CGContextRef)ctx {
+    int pixelsPerCell = 30.00; // 0.2 second per cell
+    
+    CGFloat full_height = self.frame.size.height;
+    CGFloat full_width = self.frame.size.width;
+    CGFloat cell_square_width = pixelsPerCell;
+    
+    CGContextSetLineWidth(ctx, 0.2);
+    CGContextSetStrokeColorWithColor(ctx, [UIColor greenColor].CGColor);
+    
+    int pos_x = 1;
+    while (pos_x < full_width) {
+        CGContextMoveToPoint(ctx, pos_x, 1);
+        CGContextAddLineToPoint(ctx, pos_x, full_height);
+        pos_x += cell_square_width;
+        
+        CGContextStrokePath(ctx);
+    }
+    
+    CGFloat pos_y = 1;
+    while (pos_y <= full_height) {
+        
+        CGContextSetLineWidth(ctx, 0.2);
+        
+        CGContextMoveToPoint(ctx, 1, pos_y);
+        CGContextAddLineToPoint(ctx, full_width, pos_y);
+        pos_y += cell_square_width;
+        
+        CGContextStrokePath(ctx);
+    }
+    
+    
+    CGContextSetLineWidth(ctx, 0.1);
+    
+    cell_square_width = cell_square_width / 5;
+    pos_x = 1 + cell_square_width;
+    while (pos_x < full_width) {
+        CGContextMoveToPoint(ctx, pos_x, 1);
+        CGContextAddLineToPoint(ctx, pos_x, full_height);
+        pos_x += cell_square_width;
+        
+        CGContextStrokePath(ctx);
+    }
+    
+    pos_y = 1 + cell_square_width;
+    while (pos_y <= full_height) {
+        CGContextMoveToPoint(ctx, 1, pos_y);
+        CGContextAddLineToPoint(ctx, full_width, pos_y);
+        pos_y += cell_square_width;
+        
+        CGContextStrokePath(ctx);
+    }
+}
+
+#pragma mark - 画波形
+- (void)startDrawWithOriginalData:(NSMutableArray *)data {
+//    _data = data;
+    NSString *label = [NSString stringWithFormat:@"handleData%lu", (unsigned long)_postion];
+    dispatch_async(dispatch_queue_create([label UTF8String], DISPATCH_QUEUE_CONCURRENT), ^{
+        [self handleData:data];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (_dataArray.count>0) {
+                [self drawLines:_dataArray];
+            }
+        });
+    });
+    
+    
+}
+
+#pragma mark - 画线
+- (void)drawLines:(NSArray *)points {
+    
+    for (CALayer *layer in self.layer.sublayers) {
+        if ([layer.name isEqualToString:@"lineLayerName"]) {
+            [layer removeFromSuperlayer];
+        }
+    }
+    
+    
+    UIColor *color = [UIColor colorWithRed:51/255.0 green:135/255.0 blue:255/255.0 alpha:1];
+    
+    UIBezierPath *bPath = [UIBezierPath bezierPath];
+    [bPath moveToPoint:CGPointMake(0, self.frame.size.height * 0.5)];
+    
+    [points enumerateObjectsUsingBlock:^(NSValue * pValue, NSUInteger idx, BOOL * _Nonnull stop) {
+        [bPath addLineToPoint:pValue.CGPointValue];
+    }];
+    
+    [bPath moveToPoint:CGPointMake(self.frame.size.width, self.frame.size.height * 0.5)];
+    
+    CAShapeLayer *lineLayer = [CAShapeLayer layer];
+    lineLayer.name = @"lineLayerName";
+    lineLayer.frame = self.bounds;
+    lineLayer.masksToBounds = YES;
+    lineLayer.path = bPath.CGPath;
+    lineLayer.strokeColor = color.CGColor;
+    lineLayer.fillColor = [UIColor clearColor].CGColor;
+    lineLayer.lineWidth = 1.5;
+    lineLayer.lineJoin = kCALineJoinRound;
+    lineLayer.lineCap = kCALineCapRound;
+    [self.layer addSublayer:lineLayer];
+    
+}
+
+#pragma mark - 处理point数据
+- (void)handleData:(NSMutableArray *)data {
+    CGFloat height  = self.frame.size.height;
+    // plan D
+    if (_dataArray.count > 0) {
+        [_dataArray removeAllObjects];
+    }
+    
+    _tempData = data;
+    
+//    [_tempData addObjectsFromArray:data];
+    
+    // 第一个数据
+    float startY = 0;
+    if(_tempData.count > screenNumber && screenNumber > 0) {
+        
+        NSMutableArray *screenData = [NSMutableArray array];
+        [screenData addObjectsFromArray:[_tempData subarrayWithRange:NSMakeRange(_tempData.count-screenNumber, screenNumber)]];
+        
+//        int max = [[screenData valueForKeyPath:@"@max.floatValue"] floatValue];
+        // 优化性能，降低CPU使用率
+        float tot = 0;
+        for (NSNumber *n in screenData) {
+            tot += n.floatValue;
+        }
+        baseline = tot/screenData.count;
+        
+        highest_raw = 0;
+        lowest_raw = 0;
+        
+        for (int idx = 0; idx< screenData.count; idx++) {
+
+            float x = idx * stepX;
+            if (_postion == AidPosition_LB) {
+//                NSLog(@"%f",(baseline - [screenData[idx] floatValue])/rate);
+            }
+            
+            float y = k + (baseline - [screenData[idx] floatValue])/rate;
+            startY  = y;
+
+            if (y < 0) {
+                y = 2;
+            }
+            else if (y > height) {
+                y = height-2;
+            }
+//            lastY   = y;
+            
+            NSValue *value = [NSValue valueWithCGPoint:CGPointMake(x, y)];
+            //            NSLog(@"%f,%f",obj, y);
+            
+            
+            [_dataArray addObject:value];
+            
+            if(highest_raw < [screenData[idx] floatValue]){
+                highest_raw = [screenData[idx] floatValue];
+            }
+            
+            if(lowest_raw > [screenData[idx] floatValue] || lowest_raw == 0){
+                lowest_raw = [screenData[idx] floatValue];
+            }
+        }
+        
+        //---------
+//        if (fabs((baseline - highest_raw)/(rate*1.0))<10) {
+//            [_dataArray removeAllObjects];
+//        }
+        //---------
+        
+        int difference = baseline - highest_raw;
+        if(difference < 0) {
+            difference = 0 - difference;
+        }
+        
+        if(startY > height) {
+            rate *= 2;
+        } else {
+            if(difference/rate > 1000) {
+                rate *= 5;
+            } else if (difference/rate > height*4/5) {
+                rate *= 2;
+            } else if (difference/rate < height/6) {
+                if(rate > 2)
+                    rate /= 2;
+            }
+        }
+    }
+    else {
+        NSMutableArray *screenData = [NSMutableArray array];
+        [screenData addObjectsFromArray:_tempData];
+        
+//        baseline = [[screenData valueForKeyPath:@"@avg.floatValue"] floatValue];
+        // 优化性能，降低CPU使用率
+        float tot = 0;
+        for (NSNumber *n in screenData) {
+            tot += n.floatValue;
+        }
+        baseline = tot/screenData.count;
+        
+        highest_raw = 0;
+        lowest_raw  = 0;
+        for (int idx = 0; idx< _tempData.count; idx++) {
+            
+            float x = idx * stepX;
+            float y = k + (baseline - [_tempData[idx] floatValue])/rate;
+            startY = y;
+            
+            if (y < 0) {
+                y = 2;
+            }
+            else if (y > height) {
+                y = height-2;
+            }
+//            lastY   = y;
+            
+            NSValue *value = [NSValue valueWithCGPoint:CGPointMake(x, y)];
+            //            NSLog(@"%f,%f",obj, y);
+            
+            [_dataArray addObject:value];
+            
+            if(highest_raw < [_tempData[idx] floatValue]){
+                highest_raw = [_tempData[idx] floatValue];
+            }
+            
+            if(lowest_raw > [_tempData[idx] floatValue] || lowest_raw == 0){
+                lowest_raw = [_tempData[idx] floatValue];
+            }
+        }
+        
+        //---------
+//        if (fabs((baseline - highest_raw)/(rate*1.0))<10) {
+//            [_dataArray removeAllObjects];
+//        }
+        //---------
+
+        
+        int difference = baseline - highest_raw;
+        if(difference < 0) {
+            difference = 0 - difference;
+        }
+        
+        if(startY > height) {
+            rate *= 2;
+        } else {
+            if(difference/rate > 1000) {
+                rate *= 5;
+            } else if (difference/rate > height) {
+                rate *= 2;
+            } else if (difference/rate < height/5) {
+                if(rate > 2)
+                    rate /= 2;
+            }
+        }
+    }
+    
+}
+
+@end

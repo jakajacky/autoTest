@@ -1,0 +1,31 @@
+//
+//  RFModel.h
+//  Mavic
+//
+//  Created by XiaoQiang on 2017/4/28.
+//  Copyright © 2017年 LoHas-Tech. All rights reserved.
+//
+
+#import <Foundation/Foundation.h>
+
+typedef enum : NSUInteger {
+    MeasureStep_Advance,
+    MeasureStep_Normal,
+    MeasureStep_Result
+} MeasureStep;
+
+@interface RFModel : NSObject
+
+@property (nonatomic, assign) BOOL isMale;
+
+/*
+ ** 加载数据
+ */
+- (void)reloadData;
+
+/*
+ ** 获取患者 全部信息
+ */
+- (NSString *)getPatientInfoWithStep:(MeasureStep)step;
+
+@end

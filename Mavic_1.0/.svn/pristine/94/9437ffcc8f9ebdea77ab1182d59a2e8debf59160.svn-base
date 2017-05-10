@@ -1,0 +1,54 @@
+//
+//  ResultView.m
+//  Mavic
+//
+//  Created by XiaoQiang on 2017/4/28.
+//  Copyright © 2017年 LoHas-Tech. All rights reserved.
+//
+
+#import "ResultView.h"
+#import "YYKit.h"
+@implementation ResultView
+
+- (void)awakeFromNib {
+    [super awakeFromNib];
+    
+    _currentResultContainer.layer.cornerRadius  = 8.0;
+    _currentResultContainer.layer.masksToBounds = YES;
+    _currentResultContainer.clipsToBounds       = NO;
+    _currentResultContainer.layer.borderColor   = UIColorHex(cccccc).CGColor;
+    _currentResultContainer.layer.shadowColor   = UIColorHex(000000).CGColor;
+    _currentResultContainer.layer.shadowOffset  = CGSizeMake(0, 2);
+    _currentResultContainer.layer.shadowRadius  = 1;
+    _currentResultContainer.layer.shadowOpacity = 0.09;
+    
+    _historyResultContainer.layer.cornerRadius  = 8.0;
+    _historyResultContainer.layer.masksToBounds = YES;
+    _historyResultContainer.clipsToBounds       = NO;
+    _historyResultContainer.layer.borderColor   = UIColorHex(cccccc).CGColor;
+    _historyResultContainer.layer.shadowColor   = UIColorHex(000000).CGColor;
+    _historyResultContainer.layer.shadowOffset  = CGSizeMake(0, 2);
+    _historyResultContainer.layer.shadowRadius  = 1;
+    _historyResultContainer.layer.shadowOpacity = 0.09;
+    
+    
+    _currentSignalQualityContainer.layer.cornerRadius  = 8.0;
+    _currentSignalQualityContainer.layer.masksToBounds = YES;
+    _currentSignalQualityContainer.clipsToBounds       = NO;
+    _currentSignalQualityContainer.layer.borderColor   = UIColorHex(cccccc).CGColor;
+    _currentSignalQualityContainer.layer.shadowColor   = UIColorHex(000000).CGColor;
+    _currentSignalQualityContainer.layer.shadowOffset  = CGSizeMake(0, 2);
+    _currentSignalQualityContainer.layer.shadowRadius  = 1;
+    _currentSignalQualityContainer.layer.shadowOpacity = 0.09;
+    
+    _currentInfoContainer.layer.cornerRadius  = 8.0;
+    _currentInfoContainer.layer.masksToBounds = YES;
+    _currentInfoContainer.clipsToBounds       = NO;
+    _currentInfoContainer.layer.borderColor   = UIColorHex(cccccc).CGColor;
+    _currentInfoContainer.layer.shadowColor   = UIColorHex(000000).CGColor;
+    _currentInfoContainer.layer.shadowOffset  = CGSizeMake(0, 2);
+    _currentInfoContainer.layer.shadowRadius  = 1;
+    _currentInfoContainer.layer.shadowOpacity = 0.09;
+}
+
+@end

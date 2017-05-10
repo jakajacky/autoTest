@@ -1,0 +1,98 @@
+//
+//  DeviceList.m
+//  Mavic
+//
+//  Created by XiaoQiang on 2017/4/25.
+//  Copyright © 2017年 LoHas-Tech. All rights reserved.
+//
+
+#import "DeviceList.h"
+#import "YYKit.h"
+#import "DeviceManager.h"
+
+@interface DeviceList ()
+{
+    DeviceManager *dm;
+}
+
+
+@end
+
+@implementation DeviceList
+
+- (instancetype)initWithFrame:(CGRect)frame{
+    self = [super initWithFrame:frame];
+    if (self) {
+        [self awakeFromNib];
+        dm = [DeviceManager defaultManager];
+    }
+    return self;
+}
+- (void)awakeFromNib{
+    [super awakeFromNib];
+    
+    self.contentView = [[[NSBundle mainBundle] loadNibNamed:@"DeviceList" owner:self options:nil] lastObject];
+    self.contentView.frame = self.bounds;
+    self.contentView.layer.cornerRadius  = 8.0;
+    self.contentView.layer.masksToBounds = YES;
+    self.contentView.clipsToBounds       = NO;
+    self.contentView.layer.borderColor   = UIColorHex(cccccc).CGColor;
+    self.contentView.layer.shadowColor   = UIColorHex(000000).CGColor;
+    self.contentView.layer.shadowOffset  = CGSizeMake(0, 2);
+    self.contentView.layer.shadowRadius  = 1;
+    self.contentView.layer.shadowOpacity = 0.09;
+    self.contentView.backgroundColor = [UIColor whiteColor];
+    [self addSubview:self.contentView];
+    
+    
+}
+
+- (void)reloadAllData {
+    
+    if (dm.L_T_Aid) {
+        _lt.textColor = UIColorHex(333333);
+        _lt_mac.textColor = UIColorHex(333333);
+        _lt_mac.text = dm.L_T_Aid.macString;
+        [_lt_bind setBackgroundImage:[UIImage imageNamed:@"unbindbtn"] forState:UIControlStateNormal];
+    }
+    else {
+        _lt.textColor = UIColorHex(999999);
+        _lt_mac.text = @"";
+        [_lt_bind setBackgroundImage:[UIImage imageNamed:@"bindbtn"] forState:UIControlStateNormal];
+    }
+    if (dm.R_T_Aid) {
+        _rt.textColor = UIColorHex(333333);
+        _rt_mac.textColor = UIColorHex(333333);
+        _rt_mac.text = dm.L_T_Aid.macString;
+        [_rt_bind setBackgroundImage:[UIImage imageNamed:@"unbindbtn"] forState:UIControlStateNormal];
+    }
+    else {
+        _rt.textColor = UIColorHex(999999);
+        _rt_mac.text = @"";
+        [_rt_bind setBackgroundImage:[UIImage imageNamed:@"bindbtn"] forState:UIControlStateNormal];
+    }
+    if (dm.L_B_Aid) {
+        _lb.textColor = UIColorHex(333333);
+        _lb_mac.textColor = UIColorHex(333333);
+        _lb_mac.text = dm.L_T_Aid.macString;
+        [_lb_bind setBackgroundImage:[UIImage imageNamed:@"unbindbtn"] forState:UIControlStateNormal];
+    }
+    else {
+        _lb.textColor = UIColorHex(999999);
+        _lb_mac.text = @"";
+        [_lb_bind setBackgroundImage:[UIImage imageNamed:@"bindbtn"] forState:UIControlStateNormal];
+    }
+    if (dm.R_B_Aid) {
+        _rb.textColor = UIColorHex(333333);
+        _rb_mac.textColor = UIColorHex(333333);
+        _rb_mac.text = dm.L_T_Aid.macString;
+        [_rb_bind setBackgroundImage:[UIImage imageNamed:@"unbindbtn"] forState:UIControlStateNormal];
+    }
+    else {
+        _rb.textColor = UIColorHex(999999);
+        _rb_mac.text = @"";
+        [_rb_bind setBackgroundImage:[UIImage imageNamed:@"bindbtn"] forState:UIControlStateNormal];
+    }
+}
+
+@end

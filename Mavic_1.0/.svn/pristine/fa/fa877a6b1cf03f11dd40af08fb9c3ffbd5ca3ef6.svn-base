@@ -1,0 +1,27 @@
+//
+//  ResultModel.m
+//  Mavic
+//
+//  Created by XiaoQiang on 2017/5/8.
+//  Copyright © 2017年 LoHas-Tech. All rights reserved.
+//
+
+#import "ResultModel.h"
+
+@implementation ResultModel
+
+- (void)reloadDataWith:(id)result {
+    _l_pwv = [result[@"l_pwv"] floatValue];
+    _r_pwv = [result[@"r_pwv"] floatValue];
+    
+    _signalQuality_leftHand  = [result[@"signalQuality_leftHand"] integerValue];
+    _signalQuality_rightHand = [result[@"signalQuality_rightHand"] integerValue];
+    _signalQuality_leftFoot  = [result[@"signalQuality_leftFoot"] integerValue];
+    _signalQuality_rightFoot = [result[@"signalQuality_rightFoot"] integerValue];
+    
+    _l_ptt = [result[@"lPTT"] floatValue];
+    _r_ptt = [result[@"rPTT"] floatValue];
+    
+}
+
+@end

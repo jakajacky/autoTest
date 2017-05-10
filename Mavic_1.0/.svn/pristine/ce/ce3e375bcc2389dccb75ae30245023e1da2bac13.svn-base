@@ -1,0 +1,90 @@
+//
+//  AddUserInfo.m
+//  Mavic
+//
+//  Created by XiaoQiang on 2017/4/23.
+//  Copyright © 2017年 LoHas-Tech. All rights reserved.
+//
+
+#import "AddUserInfo.h"
+#import "YYKit.h"
+
+@implementation AddUserInfo
+
+- (instancetype)initWithFrame:(CGRect)frame{
+    self = [super initWithFrame:frame];
+    if (self) {
+        [self awakeFromNib];
+    }
+    return self;
+}
+- (void)awakeFromNib{
+    [super awakeFromNib];
+    
+    self.contentView = [[[NSBundle mainBundle] loadNibNamed:@"AddUserInfo" owner:self options:nil] lastObject];
+    self.contentView.frame = self.bounds;
+    self.contentView.layer.cornerRadius  = 8.0;
+    self.contentView.layer.masksToBounds = YES;
+    self.contentView.clipsToBounds       = NO;
+    self.contentView.layer.borderColor   = UIColorHex(cccccc).CGColor;
+    self.contentView.layer.shadowColor   = UIColorHex(000000).CGColor;
+    self.contentView.layer.shadowOffset  = CGSizeMake(0, 2);
+    self.contentView.layer.shadowRadius  = 1;
+    self.contentView.layer.shadowOpacity = 0.09;
+    self.contentView.backgroundColor = [UIColor whiteColor];
+    [self addSubview:self.contentView];
+    
+    
+}
+
+- (void)setIsAddedPatient:(BOOL)isAddedPatient {
+    _isAddedPatient = isAddedPatient;
+    self.hidden = NO;
+    if (_isAddedPatient) {
+        _nameText.enabled  = NO;
+        [_nameText setTextColor:[UIColor darkGrayColor]];
+        _phoneText.enabled = NO;
+        [_phoneText setTextColor:[UIColor darkGrayColor]];
+        _genderBtn.enabled = NO;
+        [_genderBtn setTitleColor:[UIColor darkGrayColor] forState:UIControlStateNormal];
+        _ageBtn.enabled    = NO;
+        [_ageBtn setTitleColor:[UIColor darkGrayColor] forState:UIControlStateNormal];
+        _heightBtn.enabled = NO;
+        [_heightBtn setTitleColor:[UIColor darkGrayColor] forState:UIControlStateNormal];
+        _weightBtn.enabled = NO;
+        [_weightBtn setTitleColor:[UIColor darkGrayColor] forState:UIControlStateNormal];
+        _timePicker.hidden = YES;
+        _contentPicker.hidden = YES;
+        _title.text = @"患者信息";
+        [_saveInfoBtn setTitle:@"编辑" forState:UIControlStateNormal];
+    }
+    else {
+        _nameText.enabled  = YES;
+        [_nameText setTextColor:UIColorHex(007aff)];
+        _phoneText.enabled = YES;
+        [_phoneText setTextColor:UIColorHex(007aff)];
+        _genderBtn.enabled = YES;
+        [_genderBtn setTitleColor:UIColorHex(007aff) forState:UIControlStateNormal];
+        _ageBtn.enabled    = YES;
+        [_ageBtn setTitleColor:UIColorHex(007aff) forState:UIControlStateNormal];
+        _heightBtn.enabled = YES;
+        [_heightBtn setTitleColor:UIColorHex(007aff) forState:UIControlStateNormal];
+        _weightBtn.enabled = YES;
+        [_weightBtn setTitleColor:UIColorHex(007aff) forState:UIControlStateNormal];
+        _timePicker.hidden = YES;
+        _contentPicker.hidden = YES;
+        _title.text = @"添加用户";
+        [_saveInfoBtn setTitle:@"保存" forState:UIControlStateNormal];
+    }
+}
+
+- (void)setCurrentPatient:(Patient *)currentPatient {
+    _nameText.text  = currentPatient.name;
+    _phoneText.text = currentPatient.mobile;
+    [_genderBtn setTitle:currentPatient.gender?currentPatient.gender:@"未设置" forState:UIControlStateNormal];
+    [_ageBtn setTitle:currentPatient.age?currentPatient.age:@"未设置" forState:UIControlStateNormal];
+    [_heightBtn setTitle:currentPatient.height!=0?[NSString stringWithFormat:@"%ld cm", currentPatient.height]:@"未设置" forState:UIControlStateNormal];
+    [_weightBtn setTitle:currentPatient.weight!=0?[NSString stringWithFormat:@"%ld kg", currentPatient.weight]:@"未设置" forState:UIControlStateNormal];
+}
+
+@end
